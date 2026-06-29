@@ -10,6 +10,8 @@ import os
 import re
 import ssl
 import math
+import time
+import random
 import socket
 import json
 import ipaddress
@@ -185,11 +187,70 @@ class SecurityAPIHandler(BaseHTTPRequestHandler):
         if self.path == '/api/health':
             self._set_headers(200)
             self.wfile.write(json.dumps({'status': 'online', 'service': 'Unfurl Python Telemetry Engine'}).encode())
+        elif self.path == '/api/sniffer/stream':
+            self._handle_telemetry_stream()
         elif self.path.startswith('/api/'):
             self._set_headers(404)
             self.wfile.write(json.dumps({'error': 'Endpoint not found'}).encode())
         else:
             self._serve_static_file()
+
+    def _handle_telemetry_stream(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/event-stream')
+        self.send_header('Cache-Control', 'no-cache')
+        self.send_header('Connection', 'keep-alive')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.end_headers()
+
+        sample_ips = ["192.168.1.15", "10.0.4.88", "172.16.0.4", "8.8.8.8", "1.1.1.1", "45.33.32.156"]
+        threat_ports = {
+            22: "SSH (Brute Force Risk)",
+            23: "Telnet (Cleartext Risk)",
+            445: "SMB (EternalBlue / Ransomware Risk)",
+            3389: "RDP (Remote Access Risk)"
+        }
+
+        try:
+            while True:
+                time.sleep(random.uniform(0.4, 0.9))
+                src = random.choice(sample_ips)
+                dst = random.choice(sample_ips)
+                while dst == src:
+                    dst = random.choice(sample_ips)
+                    
+                protocol = random.choice(["TCP", "TCP", "TCP", "UDP", "UDP", "ICMP"])
+                src_port = random.randint(1024, 65535) if protocol != "ICMP" else None
+                
+                if random.random() < 0.18:
+                    dst_port = random.choice([22, 23, 445, 3389])
+                    is_suspicious = True
+                    alert_reason = f"Targeted Port {dst_port}: {threat_ports[dst_port]}"
+                else:
+                    dst_port = random.choice([80, 443, 53, 8080]) if protocol != "ICMP" else None
+                    is_suspicious = False
+                    alert_reason = "Normal"
+
+                size = random.randint(64, 1500)
+                if size > 1400 and not is_suspicious:
+                    is_suspicious = True
+                    alert_reason = f"Large Payload Anomaly ({size} bytes)"
+
+                packet_data = {
+                    "timestamp": time.strftime("%H:%M:%S"),
+                    "src": f"{src}:{src_port}" if src_port else src,
+                    "dst": f"{dst}:{dst_port}" if dst_port else dst,
+                    "protocol": protocol,
+                    "size": size,
+                    "is_suspicious": is_suspicious,
+                    "alert": alert_reason
+                }
+
+                message = f"data: {json.dumps(packet_data)}\n\n"
+                self.wfile.write(message.encode('utf-8'))
+                self.wfile.flush()
+        except Exception:
+            pass
 
     def _serve_static_file(self):
         req_path = urllib.parse.urlparse(self.path).path

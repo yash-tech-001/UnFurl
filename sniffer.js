@@ -21,7 +21,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         initDOMElements();
         initChart();
-        connectWebSocket();
+        connectTelemetryStream();
     });
 
     function initDOMElements() {
@@ -62,10 +62,41 @@
         });
     }
 
-    // Setup WebSocket Connection
-    function connectWebSocket() {
+    // Setup Telemetry Stream Connection (HTTP SSE with WebSocket Fallback)
+    function connectTelemetryStream() {
         if (!wsBadge || !wsStatusText) return;
 
+        const streamUrl = (window.location.origin && window.location.origin !== 'null' && window.location.protocol.startsWith('http'))
+            ? `${window.location.origin}/api/sniffer/stream`
+            : 'http://localhost:8000/api/sniffer/stream';
+
+        try {
+            const eventSource = new EventSource(streamUrl);
+
+            eventSource.onopen = () => {
+                wsBadge.className = 'ws-badge online';
+                wsStatusText.textContent = 'LIVE TELEMETRY STREAMING';
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const packet = JSON.parse(event.data);
+                    processIncomingPacket(packet);
+                } catch (err) {
+                    console.error("Error processing packet data:", err);
+                }
+            };
+
+            eventSource.onerror = () => {
+                wsBadge.className = 'ws-badge';
+                wsStatusText.textContent = 'DISCONNECTED - RETRYING...';
+            };
+        } catch (e) {
+            connectWebSocketFallback();
+        }
+    }
+
+    function connectWebSocketFallback() {
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsHost = (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')
             ? window.location.host
@@ -89,10 +120,10 @@
         socket.onclose = () => {
             wsBadge.className = 'ws-badge';
             wsStatusText.textContent = 'DISCONNECTED - RETRYING...';
-            setTimeout(connectWebSocket, 3000); // Auto-reconnect every 3s
+            setTimeout(connectTelemetryStream, 3000);
         };
 
-        socket.onerror = (err) => {
+        socket.onerror = () => {
             socket.close();
         };
     }
