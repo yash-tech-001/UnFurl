@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNFURL CYBERSECURITY // Unified SOC Dashboard</title>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <div class="container">
+        <!-- HEADER -->
+        <header>
+            <div class="brand-group">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#00e5ff" stroke-width="2.5">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+                </svg>
+                <h1>UnFurl Cybersecurity Hub</h1>
+            </div>
+
+            <div class="status-badges">
+                <!-- Python REST API Telemetry Status -->
+                <div id="pythonStatusTag" class="status-tag offline">
+                    <span>🔒</span> Python Telemetry API: Offline (Client-Only Mode)
+                </div>
+                <!-- Sniffer WebSocket Status -->
+                <div class="ws-badge" id="wsBadge">
+                    <span id="wsStatusDot">●</span> <span id="wsStatusText">WEBSOCKET DISCONNECTED</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- TAB NAVIGATION -->
+        <div class="tab-container">
+            <button class="tab-btn active" data-tab="url-analyzer-tab">
+                <span>🔎</span> URL Threat Analyzer
+            </button>
+            <button class="tab-btn" data-tab="packet-sniffer-tab">
+                <span>📡</span> Real-Time SOC Sniffer
+            </button>
+        </div>
+
+        <!-- ==========================================================================
+           TAB 1: URL THREAT ANALYZER
+           ========================================================================== -->
+        <div id="url-analyzer-tab" class="tab-content active">
+
+            <!-- Analyzer Form Card -->
+            <div class="analyzer-card">
+                <div class="input-label">
+                    <span>Target URL Analysis Input</span>
+                    <span style="font-size: 0.75rem; color: var(--text-muted); font-family: var(--font-mono);">Heuristic
+                        Engine v2.0</span>
+                </div>
+                <div class="input-wrapper">
+                    <input type="text" id="urlInput"
+                        placeholder="Enter target URL or hostname (e.g., login.paypa1.com)..." autofocus>
+                    <button class="btn" onclick="analyzeURL()">
+                        <span>Analyze URL</span>
+                    </button>
+                    <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+                </div>
+                <div class="preset-section">
+                    <span
+                        style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); margin-right: 0.5rem; text-transform: uppercase;">Presets:</span>
+                    <span class="chip" onclick="loadPreset('homograph')">Homograph Attack</span>
+                    <span class="chip" onclick="loadPreset('punycode')">Punycode Domain</span>
+                    <span class="chip" onclick="loadPreset('ip')">Raw IP Host</span>
+                    <span class="chip" onclick="loadPreset('creds')">Authority Override</span>
+                    <span class="chip" onclick="loadPreset('subdomains')">Typosquatted Subdomains</span>
+                    <span class="chip" onclick="loadPreset('safe')">Legitimate Site</span>
+                </div>
+            </div>
+
+            <!-- Analysis Results Section -->
+            <div id="resultsSection">
+                <!-- Threat Verdict Banner -->
+                <div id="verdictBanner" class="verdict-banner">
+                    <div class="verdict-info">
+                        <div class="verdict-badge" id="verdictIcon">🛡️</div>
+                        <div class="verdict-text-block">
+                            <span class="verdict-title" id="verdictTitle">RESOLVING ANALYSIS...</span>
+                            <span class="verdict-desc" id="verdictDesc">Gathering client and backend heuristics
+                                telemetry.</span>
+                        </div>
+                    </div>
+                    <div class="risk-score-wrapper">
+                        <span class="risk-score-lbl">Risk Score</span>
+                        <span class="risk-score-value" id="riskScoreValue">0</span>
+                    </div>
+                </div>
+
+                <!-- URL Analysis Details Grid -->
+                <div class="dashboard-grid">
+
+                    <!-- Heuristics Audit Panel -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <div class="panel-title">🛡️ Security Heuristics Audit</div>
+                        </div>
+                        <div class="heuristic-list" id="heuristicsList">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- URL Decomposition Panel -->
+                    <div class="panel">
+                        <div class="panel-header">
+                            <div class="panel-title">🧩 Component Decomposition</div>
+                        </div>
+                        <table class="component-table">
+                            <thead>
+                                <tr>
+                                    <th>Part</th>
+                                    <th>Extracted Telemetry</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>Protocol</td>
+                                    <td id="compProtocol">-</td>
+                                </tr>
+                                <tr>
+                                    <td>Hostname</td>
+                                    <td id="compHost">-</td>
+                                </tr>
+                                <tr>
+                                    <td>Port</td>
+                                    <td id="compPort">-</td>
+                                </tr>
+                                <tr>
+                                    <td>Pathname</td>
+                                    <td id="compPath">-</td>
+                                </tr>
+                                <tr>
+                                    <td>Parameters</td>
+                                    <td id="compParams">-</td>
+                                </tr>
+                                <tr>
+                                    <td>Hash / Fragment</td>
+                                    <td id="compHash">-</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Homograph Script Inspector Panel -->
+                    <div class="panel panel-full">
+                        <div class="panel-header">
+                            <div class="panel-title">🔤 Homograph Glyph & Script Inspector</div>
+                        </div>
+                        <div class="char-inspector-box">
+                            <div class="char-sequence" id="charSequence">
+                                <!-- Glyphs populated dynamically -->
+                            </div>
+                        </div>
+                        <p style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+                            * Highlights mixed characters from Latin and foreign scripts (Cyrillic/Greek), a tactic
+                            commonly used by attackers to forge visual matches of reputable brand names.
+                        </p>
+                    </div>
+
+                    <!-- Deep Python Telemetry Panel -->
+                    <div class="panel panel-full">
+                        <div class="panel-header">
+                            <div class="panel-title">⚡ Deep Server-Side Telemetry (Python API)</div>
+                        </div>
+                        <div id="pythonTelemetryContent">
+                            <!-- Telemetry populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Inspected URL details Panel -->
+                    <div class="panel panel-full">
+                        <div class="panel-header">
+                            <div class="panel-title">🔗 Target Reference Strings</div>
+                        </div>
+                        <div style="font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                            <div>
+                                <span
+                                    style="font-weight: 700; color: var(--text-muted); display: inline-block; width: 120px;">Raw
+                                    Input:</span>
+                                <span id="rawUrlDisplay"
+                                    style="font-family: var(--font-mono); word-break: break-all; color: var(--accent-cyan);"></span>
+                            </div>
+                            <div>
+                                <span
+                                    style="font-weight: 700; color: var(--text-muted); display: inline-block; width: 120px;">Decoded
+                                    Input:</span>
+                                <span id="decodedUrlDisplay"
+                                    style="font-family: var(--font-mono); word-break: break-all; color: var(--text-main);"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ==========================================================================
+           TAB 2: REAL-TIME SOC PACKET SNIFFER
+           ========================================================================== -->
+        <div id="packet-sniffer-tab" class="tab-content">
+
+            <!-- Packet Sniffer Metrics Grid -->
+            <div class="metrics-grid">
+                <div class="metric-card green">
+                    <div class="metric-title">Total Intercepted Packets</div>
+                    <div class="metric-value" id="statTotalPackets">0</div>
+                </div>
+                <div class="metric-card danger">
+                    <div class="metric-title">Threat Alerts Detected</div>
+                    <div class="metric-value" id="statThreatAlerts" style="color: var(--accent-danger);">0</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-title">Captured Traffic Volume</div>
+                    <div class="metric-value" id="statTotalBytes">0 KB</div>
+                </div>
+            </div>
+
+            <!-- Sniffer Grid -->
+            <div class="dashboard-split">
+
+                <!-- Protocol Breakdown Chart Panel -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">📊 Protocol Distribution</div>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="protocolChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Live Stream Log Table Panel -->
+                <div class="panel">
+                    <div class="panel-header">
+                        <div class="panel-title">📡 Live Packet Log Stream</div>
+                        <span style="font-size: 0.72rem; color: var(--text-muted); font-family: var(--font-mono);">Cap:
+                            30 Rows</span>
+                    </div>
+                    <div class="table-wrapper">
+                        <table class="soc-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Protocol</th>
+                                    <th>Source</th>
+                                    <th>Destination</th>
+                                    <th>Size</th>
+                                    <th>Threat Status / Alert</th>
+                                </tr>
+                            </thead>
+                            <tbody id="logTableBody">
+                                <!-- Dynamic rows prepended here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+        <footer>
+            UNFURL SECURITY HUB // REAL-TIME NETWORK SECURITY AND DOMAIN ANALYSIS ENGINE
+        </footer>
+    </div>
+
+    <!-- Tab Switching Logic Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const tabs = document.querySelectorAll('.tab-btn');
+            const contents = document.querySelectorAll('.tab-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const target = tab.dataset.tab;
+
+                    tabs.forEach(t => t.classList.remove('active'));
+                    contents.forEach(c => c.classList.remove('active'));
+
+                    tab.classList.add('active');
+                    document.getElementById(target).classList.add('active');
+                });
+            });
+        });
+    </script>
+
+    <!-- Project JavaScript Controllers -->
+    <script src="analyzer.js"></script>
+    <script src="sniffer.js"></script>
+</body>
+
+</html>
